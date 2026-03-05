@@ -9,13 +9,14 @@
       name,
       tag,
       comfyUiPackage,
-      gpuSupport ? "none", # "none", "cuda", "rocm"
+      gpuSupport ? "none", # "none", "cuda", "rocm", "vulkan"
       cudaVersion ? "cu124",
       extraLabels ? { },
     }:
     let
       useCuda = gpuSupport == "cuda";
       useRocm = gpuSupport == "rocm";
+      useVulkan = gpuSupport == "vulkan";
       useCpu = gpuSupport == "none";
       baseEnv = [
         "HOME=/root"
@@ -36,6 +37,8 @@
             "ComfyUI CUDA"
           else if useRocm then
             "ComfyUI ROCm"
+          else if useVulkan then
+            "ComfyUI Vulkan"
           else
             "ComfyUI";
         "org.opencontainers.image.description" =
@@ -43,6 +46,8 @@
             "ComfyUI with CUDA support for GPU acceleration"
           else if useRocm then
             "ComfyUI with ROCm support for GPU acceleration"
+          else if useVulkan then
+            "ComfyUI with Vulkan support for GPU acceleration"
           else
             "ComfyUI - The most powerful and modular diffusion model GUI";
         "org.opencontainers.image.source" = "https://github.com/utensils/comfyui-nix";
@@ -73,6 +78,11 @@
         ++ lib.optionals useRocm [
           # rocminfo suppresses a ComfyUI startup warning about missing AMD GPU info
           pkgs.rocmPackages.rocminfo
+        ]
+        ++ lib.optionals useVulkan [
+          pkgs.vulkan-loader # libvulkan.so.1 — Vulkan ICD dispatcher
+          pkgs.vulkan-tools # vulkaninfo for diagnostics
+          pkgs.shaderc # SPIR-V shader compilation
         ];
         pathsToLink = [
           "/bin"

@@ -32,6 +32,7 @@
       # Supported systems: Linux (x86_64, aarch64), macOS (Intel, Apple Silicon)
       # Note: CUDA support is only available on x86_64-linux
       # Note: ROCm support is only available on x86_64-linux
+      # Note: Vulkan support is only available on x86_64-linux
       systems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -70,6 +71,18 @@
           # - Low memory usage (no 30-60GB RAM requirement)
           # - `gfx1100` tested (to date)
           # - ROCm 7.1 runtime bundled in wheels
+          # =======================================================================
+
+          # =======================================================================
+          # Vulkan Support via Runtime Libraries
+          # =======================================================================
+          # Vulkan support adds the Vulkan loader, validation layers, and shader
+          # compiler (shaderc) to the environment. This enables custom nodes that
+          # use Vulkan-based compute (ncnn, kompute) for GPU acceleration.
+          # PyTorch itself runs on CPU; Vulkan-aware backends handle GPU work.
+          # - Fast builds (no PyTorch recompilation needed)
+          # - Works with any Vulkan-capable GPU (NVIDIA, AMD, Intel)
+          # - Requires Vulkan ICD drivers on the host
           # =======================================================================
 
           # Linux pkgs for cross-building Docker images from any system
@@ -131,12 +144,14 @@
           # Docker CUDA images use pre-built wheels (all architectures supported)
           linuxX86PackagesCuda = mkComfyPackages pkgsLinuxX86 { gpuSupport = "cuda"; };
           linuxX86PackagesRocm = mkComfyPackages pkgsLinuxX86 { gpuSupport = "rocm"; };
+          linuxX86PackagesVulkan = mkComfyPackages pkgsLinuxX86 { gpuSupport = "vulkan"; };
           linuxArm64Packages = mkComfyPackages pkgsLinuxArm64 { };
 
           nativePackages = mkComfyPackages pkgs { };
           # CUDA uses pre-built wheels (supports all GPU architectures)
           nativePackagesCuda = mkComfyPackages pkgs { gpuSupport = "cuda"; };
           nativePackagesRocm = mkComfyPackages pkgs { gpuSupport = "rocm"; };
+          nativePackagesVulkan = mkComfyPackages pkgs { gpuSupport = "vulkan"; };
 
           pythonEnv = mkPythonEnv pkgs;
 
@@ -189,6 +204,7 @@
             dockerImageLinux = linuxX86Packages.dockerImage;
             dockerImageLinuxCuda = linuxX86PackagesCuda.dockerImageCuda;
             dockerImageLinuxRocm = linuxX86PackagesRocm.dockerImageRocm;
+            dockerImageLinuxVulkan = linuxX86PackagesVulkan.dockerImageVulkan;
             dockerImageLinuxArm64 = linuxArm64Packages.dockerImage;
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
@@ -200,6 +216,8 @@
             dockerImageCuda = nativePackagesCuda.dockerImageCuda;
             rocm = nativePackagesRocm.default;
             dockerImageRocm = nativePackagesRocm.dockerImageRocm;
+            vulkan = nativePackagesVulkan.default;
+            dockerImageVulkan = nativePackagesVulkan.dockerImageVulkan;
           };
 
           # Expose custom nodes for direct use
@@ -288,6 +306,12 @@
               self.packages.${final.system}.rocm
             else
               throw "comfy-ui-rocm is only available on x86_64 Linux";
+          # Vulkan variant (x86_64 Linux only) - adds Vulkan runtime libraries for GPU compute
+          comfy-ui-vulkan =
+            if final.stdenv.isLinux && final.stdenv.isx86_64 then
+              self.packages.${final.system}.vulkan
+            else
+              throw "comfy-ui-vulkan is only available on x86_64 Linux";
           # Add custom nodes to overlay
           comfyui-custom-nodes = self.legacyPackages.${final.system}.customNodes;
         };

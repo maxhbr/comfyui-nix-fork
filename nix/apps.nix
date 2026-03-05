@@ -127,6 +127,15 @@ in
     };
   };
 }
+// pkgs.lib.optionalAttrs (packages ? vulkan) {
+  vulkan = {
+    type = "app";
+    program = "${packages.vulkan}/bin/comfy-ui";
+    meta = {
+      description = "Run ComfyUI with Vulkan (any GPU vendor)";
+    };
+  };
+}
 // pkgs.lib.optionalAttrs (packages ? dockerImage) {
   buildDocker = mkApp "build-docker" "Build ComfyUI Docker image (CPU)" ''
     echo "Building Docker image for ComfyUI..."
@@ -151,6 +160,14 @@ in
     docker load < ${packages.dockerImageRocm}
     echo "ROCm-enabled Docker image built successfully! You can now run it with:"
     echo "docker run --gpus all -p 8188:8188 -v \$PWD/data:/data comfy-ui:rocm"
+  '' [ pkgs.docker ];
+}
+// pkgs.lib.optionalAttrs (packages ? dockerImageVulkan) {
+  buildDockerVulkan = mkApp "build-docker-vulkan" "Build ComfyUI Docker image with Vulkan support" ''
+    echo "Building Docker image for ComfyUI with Vulkan support..."
+    docker load < ${packages.dockerImageVulkan}
+    echo "Vulkan-enabled Docker image built successfully! You can now run it with:"
+    echo "docker run --device /dev/dri -p 8188:8188 -v \$PWD/data:/data comfy-ui:vulkan"
   '' [ pkgs.docker ];
 }
 # Cross-platform Docker build apps (always available, use remote builder on non-Linux)
@@ -186,6 +203,18 @@ in
         docker load < ${packages.dockerImageLinuxRocm}
         echo "ROCm-enabled Docker image built successfully! You can now run it with:"
         echo "docker run --gpus all -p 8188:8188 -v \$PWD/data:/data comfy-ui:rocm"
+      ''
+      [ pkgs.docker ];
+}
+// pkgs.lib.optionalAttrs (packages ? dockerImageLinuxVulkan) {
+  buildDockerLinuxVulkan =
+    mkApp "build-docker-linux-vulkan" "Build ComfyUI Docker image for Linux x86_64 with Vulkan"
+      ''
+        echo "Building Linux x86_64 Docker image for ComfyUI with Vulkan support..."
+        echo "Note: Uses remote builder if running on non-Linux system"
+        docker load < ${packages.dockerImageLinuxVulkan}
+        echo "Vulkan-enabled Docker image built successfully! You can now run it with:"
+        echo "docker run --device /dev/dri -p 8188:8188 -v \$PWD/data:/data comfy-ui:vulkan"
       ''
       [ pkgs.docker ];
 }

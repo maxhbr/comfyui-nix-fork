@@ -3,11 +3,12 @@
   lib,
   versions,
   pythonOverrides,
-  gpuSupport ? "none", # "none", "cuda", "rocm"
+  gpuSupport ? "none", # "none", "cuda", "rocm", "vulkan"
 }:
 let
   useCuda = gpuSupport == "cuda" && pkgs.stdenv.isLinux;
   useRocm = gpuSupport == "rocm" && pkgs.stdenv.isLinux;
+  useVulkan = gpuSupport == "vulkan" && pkgs.stdenv.isLinux;
 
   python = pkgs.python312.override { packageOverrides = pythonOverrides; };
 
@@ -230,27 +231,33 @@ let
 
   # NOTE: Some custom nodes (and some Python wheels) dlopen GUI-related libs at runtime
   # (e.g. OpenCV highgui / Qt platform plugins). Ensure common X11 libs are discoverable.
-  libPath = lib.makeLibraryPath [
-    pkgs.stdenv.cc.cc.lib
-    pkgs.glib
-    pkgs.libGL
-    # X11 / XCB runtime libs (fixes: libxcb.so.1 not found)
-    pkgs.xorg.libxcb
-    pkgs.xorg.libX11
-    pkgs.xorg.libXext
-    pkgs.xorg.libXrender
-    pkgs.xorg.libXfixes
-    pkgs.xorg.libXi
-    pkgs.xorg.libXrandr
-    pkgs.xorg.libXcursor
-    pkgs.xorg.libXcomposite
-    pkgs.xorg.libXdamage
-    pkgs.xorg.libXau
-    pkgs.xorg.libXdmcp
-    pkgs.xorg.libSM
-    pkgs.xorg.libICE
-    pkgs.libxkbcommon
-  ];
+  libPath = lib.makeLibraryPath (
+    [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.glib
+      pkgs.libGL
+      # X11 / XCB runtime libs (fixes: libxcb.so.1 not found)
+      pkgs.xorg.libxcb
+      pkgs.xorg.libX11
+      pkgs.xorg.libXext
+      pkgs.xorg.libXrender
+      pkgs.xorg.libXfixes
+      pkgs.xorg.libXi
+      pkgs.xorg.libXrandr
+      pkgs.xorg.libXcursor
+      pkgs.xorg.libXcomposite
+      pkgs.xorg.libXdamage
+      pkgs.xorg.libXau
+      pkgs.xorg.libXdmcp
+      pkgs.xorg.libSM
+      pkgs.xorg.libICE
+      pkgs.libxkbcommon
+    ]
+    ++ lib.optionals useVulkan [
+      pkgs.vulkan-loader # libvulkan.so.1 — ICD dispatcher
+      pkgs.shaderc # libshaderc_shared.so — SPIR-V shader compilation
+    ]
+  );
 
   # Platform-specific default data directory
   # macOS: ~/Library/Application Support/comfy-ui (Apple convention)
@@ -260,6 +267,30 @@ let
       "$HOME/Library/Application Support/comfy-ui"
     else
       "$HOME/.config/comfy-ui";
+
+  # Vulkan environment setup (ICD discovery, validation layers)
+  vulkanEnvSetup =
+    if useVulkan then
+      ''
+        # Vulkan: Set ICD search path so the Vulkan loader finds GPU drivers
+        # On NixOS, /run/opengl-driver/share/vulkan/icd.d contains driver ICDs
+        if [[ -d "/run/opengl-driver/share/vulkan/icd.d" ]]; then
+          export VK_ICD_FILENAMES="''${VK_ICD_FILENAMES:+$VK_ICD_FILENAMES:}$(find /run/opengl-driver/share/vulkan/icd.d -name '*.json' -print0 | tr '\0' ':')"
+        fi
+        # Also check standard paths for non-NixOS Linux
+        for icd_dir in /usr/share/vulkan/icd.d /etc/vulkan/icd.d; do
+          if [[ -d "$icd_dir" ]]; then
+            export VK_ICD_FILENAMES="''${VK_ICD_FILENAMES:+$VK_ICD_FILENAMES:}$(find "$icd_dir" -name '*.json' -print0 | tr '\0' ':')"
+          fi
+        done
+
+        # Point Vulkan layer search to Nix-provided validation layers (if present)
+        if [[ -d "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d" ]]; then
+          export VK_LAYER_PATH="''${VK_LAYER_PATH:+$VK_LAYER_PATH:}${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d"
+        fi
+      ''
+    else
+      "";
 
   # Platform-specific library path setup
   libraryPathSetup =
@@ -277,6 +308,8 @@ let
         if [[ -d "/run/opengl-driver/lib" ]]; then
           export LD_LIBRARY_PATH="/run/opengl-driver/lib:$LD_LIBRARY_PATH"
         fi
+
+        ${vulkanEnvSetup}
       '';
 
   # Platform-specific browser command
@@ -682,6 +715,16 @@ let
       "org.opencontainers.image.version" = versions.comfyui.version;
     };
   };
+
+  dockerImageVulkan = dockerLib.mkDockerImage {
+    inherit gpuSupport;
+    name = "comfy-ui";
+    tag = "vulkan";
+    comfyUiPackage = comfyUiPackage;
+    extraLabels = {
+      "org.opencontainers.image.version" = versions.comfyui.version;
+    };
+  };
 in
 {
   default = comfyUiPackage;
@@ -689,6 +732,7 @@ in
     dockerImage
     dockerImageCuda
     dockerImageRocm
+    dockerImageVulkan
     pythonRuntime
     comfyuiSrc
     modelDownloaderDir
