@@ -32,6 +32,24 @@ let
     pkgs.glib
   ];
 
+  # Stub library for libnvshmem_host.so.3 (NVSHMEM multi-node GPU communication)
+  # PyTorch 2.10+ unconditionally links libtorch_nvshmem.so against this library,
+  # but NVSHMEM is not in nixpkgs and not needed for single-node inference.
+  # We provide a no-op stub so the dynamic linker can resolve the soname.
+  nvshmemStub = pkgs.stdenv.mkDerivation {
+    pname = "libnvshmem-stub";
+    version = "3";
+    dontUnpack = true;
+    buildPhase = ''
+      echo 'void __nvshmem_stub(void) {}' > stub.c
+      $CC -shared -o libnvshmem_host.so.3 stub.c -Wl,-soname,libnvshmem_host.so.3
+    '';
+    installPhase = ''
+      mkdir -p $out/lib
+      cp libnvshmem_host.so.3 $out/lib/
+    '';
+  };
+
   # CUDA libraries needed by PyTorch wheels (for auto-patchelf)
   cudaLibs = pkgs.lib.optionals useCuda (
     with pkgs.cudaPackages;
@@ -48,6 +66,7 @@ let
       cudnn # libcudnn.so.9
       nccl # libnccl.so.2
       cuda_nvrtc # libnvrtc.so.12
+      nvshmemStub # libnvshmem_host.so.3 (stub for multi-node GPU comm)
     ]
   );
 
@@ -82,11 +101,7 @@ lib.optionalAttrs useCuda {
     ];
     buildInputs = wheelBuildInputs ++ cudaLibs;
     # libcuda.so.1 comes from the NVIDIA driver at runtime, not from cudaPackages
-    # libnvshmem_host.so.3 (multi-node GPU comm) is optional and not in nixpkgs
-    autoPatchelfIgnoreMissingDeps = [
-      "libcuda.so.1"
-      "libnvshmem_host.so.3"
-    ];
+    autoPatchelfIgnoreMissingDeps = [ "libcuda.so.1" ];
 
     # Remove nvidia-* and triton dependencies from wheel metadata
     # These are provided by nixpkgs cudaPackages, not PyPI packages
@@ -97,17 +112,6 @@ lib.optionalAttrs useCuda {
           sed -i '/^Requires-Dist: triton/d' "$metadata"
         fi
       done
-    '';
-
-    # Strip the DT_NEEDED entry for libnvshmem_host.so.3 from libtorch_nvshmem.so
-    # This library is for multi-node GPU communication (NVSHMEM) which is not in nixpkgs
-    # and not needed for single-node inference. Without this, torch._C import fails
-    # because the dynamic linker tries to resolve the missing library unconditionally.
-    postFixup = ''
-      local nvshmem="$out/${final.python.sitePackages}/torch/lib/libtorch_nvshmem.so"
-      if [[ -f "$nvshmem" ]]; then
-        ${pkgs.patchelf}/bin/patchelf --remove-needed libnvshmem_host.so.3 "$nvshmem"
-      fi
     '';
 
     propagatedBuildInputs = with final; [
