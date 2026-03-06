@@ -275,12 +275,14 @@ let
         # Vulkan: Set ICD search path so the Vulkan loader finds GPU drivers
         # On NixOS, /run/opengl-driver/share/vulkan/icd.d contains driver ICDs
         if [[ -d "/run/opengl-driver/share/vulkan/icd.d" ]]; then
-          export VK_ICD_FILENAMES="''${VK_ICD_FILENAMES:+$VK_ICD_FILENAMES:}$(find /run/opengl-driver/share/vulkan/icd.d -name '*.json' -print0 | tr '\0' ':')"
+          VK_ICD_FILENAMES="''${VK_ICD_FILENAMES:+$VK_ICD_FILENAMES:}$(find /run/opengl-driver/share/vulkan/icd.d -name '*.json' -print0 | tr '\0' ':')"
+          export VK_ICD_FILENAMES
         fi
         # Also check standard paths for non-NixOS Linux
         for icd_dir in /usr/share/vulkan/icd.d /etc/vulkan/icd.d; do
           if [[ -d "$icd_dir" ]]; then
-            export VK_ICD_FILENAMES="''${VK_ICD_FILENAMES:+$VK_ICD_FILENAMES:}$(find "$icd_dir" -name '*.json' -print0 | tr '\0' ':')"
+            VK_ICD_FILENAMES="''${VK_ICD_FILENAMES:+$VK_ICD_FILENAMES:}$(find "$icd_dir" -name '*.json' -print0 | tr '\0' ':')"
+            export VK_ICD_FILENAMES
           fi
         done
 
