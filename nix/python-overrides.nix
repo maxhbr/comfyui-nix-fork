@@ -43,6 +43,8 @@ let
       libcurand # libcurand.so.10
       libcusolver # libcusolver.so.11
       libcusparse # libcusparse.so.12
+      libcusparse_lt # libcusparseLt.so.0 (structured sparsity, new in PyTorch 2.10+)
+      libcufile # libcufile.so.0 (GPUDirect Storage, new in PyTorch 2.10+)
       cudnn # libcudnn.so.9
       nccl # libnccl.so.2
       cuda_nvrtc # libnvrtc.so.12
@@ -80,12 +82,9 @@ lib.optionalAttrs useCuda {
     ];
     buildInputs = wheelBuildInputs ++ cudaLibs;
     # libcuda.so.1 comes from the NVIDIA driver at runtime, not from cudaPackages
-    # libcufile.so.0 (GDS), libcusparseLt.so.0 (sparse), libnvshmem_host.so.3 (multi-GPU)
-    # are optional runtime libraries not available in most environments
+    # libnvshmem_host.so.3 (multi-node GPU comm) is optional and not in nixpkgs
     autoPatchelfIgnoreMissingDeps = [
       "libcuda.so.1"
-      "libcufile.so.0"
-      "libcusparseLt.so.0"
       "libnvshmem_host.so.3"
     ];
 
