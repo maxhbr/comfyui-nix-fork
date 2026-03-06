@@ -80,7 +80,14 @@ lib.optionalAttrs useCuda {
     ];
     buildInputs = wheelBuildInputs ++ cudaLibs;
     # libcuda.so.1 comes from the NVIDIA driver at runtime, not from cudaPackages
-    autoPatchelfIgnoreMissingDeps = [ "libcuda.so.1" ];
+    # libcufile.so.0 (GDS), libcusparseLt.so.0 (sparse), libnvshmem_host.so.3 (multi-GPU)
+    # are optional runtime libraries not available in most environments
+    autoPatchelfIgnoreMissingDeps = [
+      "libcuda.so.1"
+      "libcufile.so.0"
+      "libcusparseLt.so.0"
+      "libnvshmem_host.so.3"
+    ];
 
     # Remove nvidia-* and triton dependencies from wheel metadata
     # These are provided by nixpkgs cudaPackages, not PyPI packages
