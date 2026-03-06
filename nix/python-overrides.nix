@@ -99,6 +99,17 @@ lib.optionalAttrs useCuda {
       done
     '';
 
+    # Strip the DT_NEEDED entry for libnvshmem_host.so.3 from libtorch_nvshmem.so
+    # This library is for multi-node GPU communication (NVSHMEM) which is not in nixpkgs
+    # and not needed for single-node inference. Without this, torch._C import fails
+    # because the dynamic linker tries to resolve the missing library unconditionally.
+    postFixup = ''
+      local nvshmem="$out/${final.python.sitePackages}/torch/lib/libtorch_nvshmem.so"
+      if [[ -f "$nvshmem" ]]; then
+        ${pkgs.patchelf}/bin/patchelf --remove-needed libnvshmem_host.so.3 "$nvshmem"
+      fi
+    '';
+
     propagatedBuildInputs = with final; [
       filelock
       typing-extensions
